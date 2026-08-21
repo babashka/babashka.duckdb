@@ -15,9 +15,12 @@
         (duck/query db \"select count(*) c from t\"))
 
   Rows come back as maps with keywordized column names. Integer columns
-  come back as longs, BOOLEAN as true/false, FLOAT/DOUBLE as doubles,
-  everything else (VARCHAR, DATE, TIMESTAMP, ...) as strings."
-  (:require [babashka.ffi :as ffi :refer [defcfn]]))
+  come back as longs, BOOLEAN as true/false, FLOAT/DOUBLE as doubles, DATE
+  as java.time.LocalDate, TIMESTAMP as LocalDateTime, TIME as LocalTime,
+  DECIMAL as BigDecimal, HUGEINT as BigInteger, NULL as nil, and everything
+  else (VARCHAR, BLOB, TIMESTAMPTZ, nested types, ...) as strings."
+  (:require [babashka.ffi :as ffi :refer [defcfn]]
+            [clojure.string :as str]))
 
 (ffi/load-system-library "duckdb")
 
@@ -109,6 +112,17 @@
       (<= 2 type-id 9) (c-value-int64 res col row)
       ;; FLOAT, DOUBLE
       (<= 10 type-id 11) (c-value-double res col row)
+      ;; TIMESTAMP: "2026-08-21 13:00:00[.ffffff]"
+      (= 12 type-id) (java.time.LocalDateTime/parse
+                      (str/replace-first (varchar-at res col row) " " "T"))
+      ;; DATE
+      (= 13 type-id) (java.time.LocalDate/parse (varchar-at res col row))
+      ;; TIME
+      (= 14 type-id) (java.time.LocalTime/parse (varchar-at res col row))
+      ;; HUGEINT (int128)
+      (= 16 type-id) (bigint (java.math.BigInteger. ^String (varchar-at res col row)))
+      ;; DECIMAL
+      (= 19 type-id) (bigdec (varchar-at res col row))
       :else (varchar-at res col row))))
 
 (defn- read-rows [res]

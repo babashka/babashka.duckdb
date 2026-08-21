@@ -21,6 +21,17 @@
              (duck/query db ["select i from t where s = ?" "b"])))
       (is (= [{:c 1}]
              (duck/query db ["select count(*) c from t where d > ? and i < ?" 2.0 3]))))
+    (testing "temporal, decimal and hugeint values come back typed"
+      (is (= [{:d (java.time.LocalDate/parse "2026-08-21")
+               :ts (java.time.LocalDateTime/parse "2026-08-21T13:37:00")
+               :t (java.time.LocalTime/parse "13:37:00")
+               :dc 1.50M
+               :h 170141183460469231731687303715884105727N}]
+             (duck/query db "select date '2026-08-21' d,
+                                    timestamp '2026-08-21 13:37:00' ts,
+                                    time '13:37' t,
+                                    1.5::decimal(4,2) dc,
+                                    170141183460469231731687303715884105727::hugeint h"))))
     (testing "bad sql throws with the duckdb message"
       (is (thrown-with-msg? Exception #"duckdb:"
                             (duck/query db "select nope from nothing"))))))

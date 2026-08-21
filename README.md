@@ -8,28 +8,47 @@ of your distro).
 
 ## Usage
 
+DuckDB queries data files directly, so a babashka script gets SQL
+analytics over CSV, Parquet and JSON without creating a database. Pass
+nil as the db to run in memory:
+
 ```clojure
 (require '[babashka.duckdb :as duck])
 
-(duck/query "/tmp/analytics.db"
-  ["select * from 'events.csv' where user = ?" "michiel"])
-;;=> [{:user "michiel" :event "login"}]
+(duck/query nil "select country, count(*) n, round(avg(amount), 1) avg
+                 from 'orders.csv'
+                 group by country order by n desc")
+;;=> [{:country "NL", :n 3, :avg 39.8}
+;;    {:country "DE", :n 2, :avg 25.0}
+;;    {:country "FR", :n 1, :avg 12.0}]
 ```
 
-A string db argument opens and closes the database around the call. Pass
-nil as path for an in-memory database. Hold a connection for multiple
-operations:
+The same works for `'logs/*.parquet'` globs, `read_json('api.json')`,
+and joins across files of different formats.
+
+`query` returns a vector of maps with keywordized column names. Rows come
+back typed: longs, doubles, booleans, java.time values for DATE and
+TIMESTAMP, BigDecimal for DECIMAL, nil for NULL.
+
+Query vectors follow the `[sql & params]` shape, so
+[honeysql](https://github.com/seancorfield/honeysql)-formatted vectors
+work as-is:
 
 ```clojure
-(duck/with-db [db nil]
-  (duck/execute! db ["create table t as select * from 'data.parquet'"])
-  (duck/query db "select count(*) c from t"))
+(duck/query nil ["select * from 'orders.csv' where amount > ?" 30])
 ```
 
-`query` returns a vector of maps with keywordized column names. `execute!`
-returns `{:rows-changed n}`. Query vectors follow the `[sql & params]`
-shape, so [honeysql](https://github.com/seancorfield/honeysql)-formatted
-vectors work as-is.
+A string db argument opens that database file and closes it around the
+call. To keep state across calls, hold a connection:
+
+```clojure
+(duck/with-db [db "analytics.db"]
+  (duck/execute! db "create table orders as select * from 'orders.csv'")
+  (duck/query db "select sum(amount) total from orders"))
+;;=> [{:total 181.5}]
+```
+
+`execute!` returns `{:rows-changed n}`.
 
 ## Test
 

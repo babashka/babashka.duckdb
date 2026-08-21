@@ -1,9 +1,12 @@
 # ffi-duckdb
 
-ffi-duckdb runs SQL from a babashka script without a separate database server.
-It uses DuckDB and returns query results as Clojure data.
+[DuckDB](https://duckdb.org/) is a database that runs inside your program. It
+can read CSV files directly with SQL, without a separate database server.
 
-ffi-duckdb is experimental because
+This library makes DuckDB available to babashka. It returns query results as
+Clojure data.
+
+This library is experimental because
 [babashka.ffi](https://github.com/babashka/babashka/blob/master/doc/ffi.md) is
 experimental.
 

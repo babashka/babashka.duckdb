@@ -38,9 +38,5 @@ jobs:
 
       - name: Run tests
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then sep=";"; bb=./bb.exe; else sep=":"; bb=./bb; fi
-          "$bb" -cp "src${sep}test" -e "
-            (require '[clojure.test :as t] 'babashka.duckdb-test)
-            (println \"duckdb\" (babashka.duckdb/version))
-            (let [{:keys [fail error]} (t/run-tests 'babashka.duckdb-test)]
-              (System/exit (min 1 (+ fail error))))"
+          if [ "$RUNNER_OS" = "Windows" ]; then bb=./bb.exe; else bb=./bb; fi
+          "$bb" test

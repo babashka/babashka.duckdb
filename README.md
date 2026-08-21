@@ -81,9 +81,6 @@ each value:
 (duck/query nil ["select * from 'orders.csv' where amount > ?" 30])
 ```
 
-You can also pass query vectors from
-[HoneySQL](https://github.com/seancorfield/honeysql) without changes.
-
 Use `with-db` to run several operations with the same database. Give it a file
 name to save the database:
 
@@ -98,6 +95,24 @@ name to save the database:
 
 Use `execute!` for SQL that changes the database. It returns
 `{:rows-changed n}`, where `n` is the number of changed rows.
+
+### HoneySQL
+
+[HoneySQL](https://github.com/seancorfield/honeysql) builds SQL from Clojure
+data. Pass the result of `sql/format` to `query`:
+
+```clojure
+(require '[honey.sql :as sql])
+
+(duck/query "analytics.db"
+  (sql/format {:select [:country :amount]
+               :from [:orders]
+               :where [:> :amount 30]
+               :order-by [[:amount :desc]]}))
+;;=> [{:country "NL", :amount 54.0}
+;;    {:country "NL", :amount 40.5}
+;;    {:country "DE", :amount 31.0}]
+```
 
 ## Test
 

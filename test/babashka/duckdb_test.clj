@@ -34,7 +34,11 @@
                                     170141183460469231731687303715884105727::hugeint h"))))
     (testing "bad sql throws with the duckdb message"
       (is (thrown-with-msg? Exception #"duckdb:"
-                            (duck/query db "select nope from nothing"))))))
+                            (duck/query db "select nope from nothing"))))
+    (testing "a failing prepared statement throws and the connection survives"
+      (is (thrown-with-msg? Exception #"duckdb:"
+                            (duck/query db ["select nope from nothing where x = ?" 1])))
+      (is (= [{:one 1}] (duck/query db "select 1 one"))))))
 
 (deftest path-test
   (testing "a string db opens and closes around the call"

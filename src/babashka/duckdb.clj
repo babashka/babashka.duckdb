@@ -145,11 +145,12 @@
       (if (seq params)
         (let [pstmt (ffi/alloc (ffi/sizeof :pointer))]
           (try
+            ;; on failure the finally destroys the statement; the error
+            ;; message must be read from it first
             (when-not (zero? (c-prepare (:conn conn) sql pstmt))
-              (let [stmt (ffi/read pstmt :pointer)
-                    msg (c-prepare-error stmt)]
-                (c-destroy-prepare pstmt)
-                (throw (ex-info (str "duckdb: " msg) {:sql sql}))))
+              (let [stmt (ffi/read pstmt :pointer)]
+                (throw (ex-info (str "duckdb: " (c-prepare-error stmt))
+                                {:sql sql}))))
             (let [stmt (ffi/read pstmt :pointer)]
               (doseq [[i v] (map-indexed vector params)]
                 (let [i (inc i)

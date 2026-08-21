@@ -1,24 +1,20 @@
 (ns babashka.duckdb
-  "DuckDB over babashka.ffi against libduckdb. Query vectors follow the
-  [sql & params] shape, so honeysql-formatted vectors work as-is:
+  "Run SQL with DuckDB from babashka:
 
       (require '[babashka.duckdb :as duck])
-      (duck/query \"/tmp/analytics.db\"
-        [\"select * from 'events.csv' where user = ?\" \"michiel\"])
+      (duck/query nil \"select 42 as answer\")
 
-  A string db argument opens and closes the database around the call; nil
-  as path opens an in-memory database via open. For many operations hold a
-  connection:
+  If you do not want to create a database file, pass nil as the database.
+  Pass a file name to save data between calls.
 
-      (duck/with-db [db nil]   ; in-memory
-        (duck/execute! db [\"create table t as select * from 'data.parquet'\"])
-        (duck/query db \"select count(*) c from t\"))
+  Use with-db to share a temporary database across several calls:
 
-  Rows come back as maps with keywordized column names. Integer columns
-  come back as longs, BOOLEAN as true/false, FLOAT/DOUBLE as doubles, DATE
-  as java.time.LocalDate, TIMESTAMP as LocalDateTime, TIME as LocalTime,
-  DECIMAL as BigDecimal, HUGEINT as BigInteger, NULL as nil, and everything
-  else (VARCHAR, BLOB, TIMESTAMPTZ, nested types, ...) as strings."
+      (duck/with-db [db nil]
+        (duck/execute! db \"create table t as select 42 as answer\")
+        (duck/query db \"select * from t\"))
+
+  Query results contain one map for each row. Column names are keywords.
+  SQL NULL values become nil."
   (:require [babashka.ffi :as ffi :refer [defcfn]]
             [clojure.string :as str]))
 
@@ -52,16 +48,17 @@
 (defcfn ^:private c-bind-null "duckdb_bind_null" [:pointer :uint64] :int)
 
 (defn version
-  "The DuckDB library version string."
+  "Returns the version of the loaded DuckDB library."
   []
   (c-library-version))
 
-;; duckdb_result is a 48-byte out-param struct; allocate with headroom
+;; Reserve more than the 48 bytes that duckdb_result needs.
 (def ^:private result-size 64)
 
 (defn open
-  "Opens the database at path, nil for in-memory. Returns a connection for
-  use with execute!, query and close!."
+  "Opens a DuckDB connection. A nil path creates a temporary database for this
+  connection. A file name opens or creates that database file. Returns a
+  connection for use with query, execute! and close!."
   [path]
   (let [pdb (ffi/alloc (ffi/sizeof :pointer))
         pconn (ffi/alloc (ffi/sizeof :pointer))]
@@ -76,7 +73,7 @@
       (finally (ffi/free pconn)))))
 
 (defn close!
-  "Closes a connection returned by open."
+  "Closes a connection from open. Returns nil."
   [{:keys [db conn]}]
   (let [pconn (ffi/alloc (ffi/sizeof :pointer))]
     (try
@@ -89,8 +86,11 @@
   nil)
 
 (defmacro with-db
-  "(with-db [db \"/tmp/analytics.db\"] ...) - opens the database (nil path =
-  in-memory), binds the connection, closes it after the body."
+  "Opens a database for the enclosed code. Closes the database after the code
+  finishes. Use nil for a temporary database.
+
+      (with-db [db \"analytics.db\"]
+        (query db \"select 42 as answer\"))"
   [[sym path] & body]
   `(let [~sym (open ~path)]
      (try ~@body
@@ -183,13 +183,17 @@
     (with-db [db db-or-path] (f db))))
 
 (defn query
-  "Runs a select. db is a connection from open, or a path (opened and closed
-  around the call). q is a SQL string or a [sql & params] vector. Returns a
-  vector of maps with keywordized column names."
+  "Runs a query and returns a vector of maps. Each map is one result row.
+  Column names are keywords. SQL NULL values become nil.
+
+  db can be a connection from open, a database file name, or nil. q can be a
+  SQL string or a vector. The vector starts with SQL. Each ? in SQL uses the
+  next value in the vector."
   [db q]
   (with-conn db (fn [db] (run* db q true))))
 
 (defn execute!
-  "Runs a statement. Arguments as in query. Returns {:rows-changed n}."
+  "Runs SQL that changes the database. db and q accept the same values as
+  query. Returns {:rows-changed n}."
   [db q]
   (with-conn db (fn [db] (run* db q false))))

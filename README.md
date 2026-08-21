@@ -9,15 +9,33 @@ experimental.
 
 ## Install
 
-Use a version of babashka that includes `babashka.ffi`.
+The current babashka release does not include `babashka.ffi`. Install the
+development build:
 
-Before you use ffi-duckdb, install the DuckDB library. On macOS, run:
+```bash
+bash <(curl https://raw.githubusercontent.com/babashka/babashka/master/install) --dev-build --dir /tmp --dynamic
+```
+
+### macOS
+
+Install the DuckDB library:
 
 ```bash
 brew install duckdb
 ```
 
-On Linux, use the package manager for your Linux version to install `duckdb`.
+### Linux
+
+Use the package manager for your Linux version to install `duckdb`.
+
+### Windows
+
+Run these commands in Bash:
+
+```bash
+curl -sL -o libduckdb.zip https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-windows-amd64.zip
+unzip -o libduckdb.zip duckdb.dll
+```
 
 ## Usage
 

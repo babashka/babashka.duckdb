@@ -41,4 +41,4 @@ bb test
 
 Copyright (c) Michiel Borkent
 
-Distributed under the EPL License. See LICENSE.
+Distributed under the MIT License. See LICENSE.

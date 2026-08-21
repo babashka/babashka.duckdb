@@ -96,6 +96,19 @@ name to save the database:
 Use `execute!` for SQL that changes the database. It returns
 `{:rows-changed n}`, where `n` is the number of changed rows.
 
+### Thread safety
+
+In the DuckDB C API, a connection is a single-thread object. Do not use one
+connection from multiple threads. Concurrent use of a shared connection can
+crash the process.
+
+Use one connection per thread. The string-path form opens a private connection
+for each call.
+
+Opening the same database file twice in one process fails because DuckDB locks
+the file. Parallel work against one file is not currently possible with this
+library. This is a known limitation.
+
 ### HoneySQL
 
 [HoneySQL](https://github.com/seancorfield/honeysql) builds SQL from Clojure

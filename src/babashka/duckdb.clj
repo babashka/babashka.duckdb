@@ -58,7 +58,8 @@
 (defn open
   "Opens a DuckDB connection. A nil path creates a temporary database for this
   connection. A file name opens or creates that database file. Returns a
-  connection for use with query, execute! and close!."
+  connection for use with query, execute! and close!. The returned connection
+  is a single-thread object. Concurrent use may crash the process."
   [path]
   (let [pdb (ffi/alloc (ffi/sizeof :pointer))
         pconn (ffi/alloc (ffi/sizeof :pointer))]

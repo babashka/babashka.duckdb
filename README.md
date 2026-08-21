@@ -1,7 +1,7 @@
 # ffi-duckdb
 
-Run SQL from a babashka script without a separate database server. ffi-duckdb
-uses DuckDB and returns query results as Clojure data.
+ffi-duckdb runs SQL from a babashka script without a separate database server.
+It uses DuckDB and returns query results as Clojure data.
 
 ffi-duckdb is experimental because
 [babashka.ffi](https://github.com/babashka/babashka/blob/master/doc/ffi.md) is
@@ -11,7 +11,7 @@ experimental.
 
 Use a version of babashka that includes `babashka.ffi`.
 
-Install the DuckDB library before you use ffi-duckdb. On macOS, run:
+Before you use ffi-duckdb, install the DuckDB library. On macOS, run:
 
 ```bash
 brew install duckdb

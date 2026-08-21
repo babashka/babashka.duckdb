@@ -1,16 +1,33 @@
 # ffi-duckdb
 
-DuckDB for babashka over [babashka.ffi](https://github.com/babashka/babashka/blob/master/doc/ffi.md).
+Run SQL from a babashka script without a separate database server. ffi-duckdb
+uses DuckDB and returns query results as Clojure data.
 
-Experimental, like babashka.ffi itself. Needs a babashka with `babashka.ffi`
-and the DuckDB shared library (`brew install duckdb`, or the duckdb package
-of your distro).
+ffi-duckdb is experimental because
+[babashka.ffi](https://github.com/babashka/babashka/blob/master/doc/ffi.md) is
+experimental.
+
+## Install
+
+Use a version of babashka that includes `babashka.ffi`.
+
+Install the DuckDB library before you use ffi-duckdb. On macOS, run:
+
+```bash
+brew install duckdb
+```
+
+On Linux, use the package manager for your Linux version to install `duckdb`.
 
 ## Usage
 
-DuckDB queries data files directly, so a babashka script gets SQL
-analytics over CSV, Parquet and JSON without creating a database. Pass
-nil as the db to run in memory:
+This example reads a CSV file with SQL. A CSV file stores rows and columns as
+plain text.
+
+DuckDB reads the file directly. You do not need to create a database first.
+
+If you do not want to create a database file, pass `nil` as the first
+argument.
 
 ```clojure
 (require '[babashka.duckdb :as duck])
@@ -31,23 +48,23 @@ FR,12.0")
 ;;    {:country "FR", :n 1, :avg 12.0}]
 ```
 
-The same works for `'logs/*.parquet'` globs, `read_json('api.json')`,
-and joins across files of different formats.
+`query` returns a vector of maps. Each map is one result row. Column names
+become Clojure keywords.
 
-`query` returns a vector of maps with keywordized column names. Rows come
-back typed: longs, doubles, booleans, java.time values for DATE and
-TIMESTAMP, BigDecimal for DECIMAL, nil for NULL.
+SQL `NULL` becomes `nil`.
 
-Query vectors follow the `[sql & params]` shape, so
-[honeysql](https://github.com/seancorfield/honeysql)-formatted vectors
-work as-is:
+Use a query vector to keep values separate from the SQL text. Write a `?` for
+each value:
 
 ```clojure
 (duck/query nil ["select * from 'orders.csv' where amount > ?" 30])
 ```
 
-A string db argument opens that database file and closes it around the
-call. To keep state across calls, hold a connection:
+You can also pass query vectors from
+[HoneySQL](https://github.com/seancorfield/honeysql) without changes.
+
+Use `with-db` to run several operations with the same database. Give it a file
+name to save the database:
 
 ```clojure
 (duck/with-db [db "analytics.db"]
@@ -56,9 +73,14 @@ call. To keep state across calls, hold a connection:
 ;;=> [{:total 181.5}]
 ```
 
-`execute!` returns `{:rows-changed n}`.
+`with-db` closes the database after the code inside it finishes.
+
+Use `execute!` for SQL that changes the database. It returns
+`{:rows-changed n}`, where `n` is the number of changed rows.
 
 ## Test
+
+Run the tests:
 
 ```bash
 bb test

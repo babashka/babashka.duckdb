@@ -15,6 +15,14 @@ nil as the db to run in memory:
 ```clojure
 (require '[babashka.duckdb :as duck])
 
+(spit "orders.csv" "country,amount
+NL,25.0
+NL,54.0
+DE,19.0
+NL,40.5
+DE,31.0
+FR,12.0")
+
 (duck/query nil "select country, count(*) n, round(avg(amount), 1) avg
                  from 'orders.csv'
                  group by country order by n desc")

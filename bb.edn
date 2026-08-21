@@ -1,0 +1,4 @@
+{:paths ["src"]
+ :tasks
+ {test {:doc "Run the tests. Needs a bb with babashka.ffi and libduckdb."
+        :task (shell "bb -cp src:test -e (require,'babashka.duckdb-test),(clojure.test/run-tests,'babashka.duckdb-test)")}}}

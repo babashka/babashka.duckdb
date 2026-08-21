@@ -1,0 +1,3 @@
+.test/
+.cpcache/
+.clj-kondo/.cache/

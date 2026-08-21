@@ -1,0 +1,46 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-2022]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install babashka dev build
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install) --dev-build --dir . --dynamic
+
+      - name: Install duckdb (linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -sL -o libduckdb.zip https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-amd64.zip
+          unzip -o libduckdb.zip libduckdb.so
+          echo "LD_LIBRARY_PATH=$PWD" >> "$GITHUB_ENV"
+
+      - name: Install duckdb (macos)
+        if: runner.os == 'macOS'
+        run: brew install duckdb
+
+      - name: Install duckdb (windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -sL -o libduckdb.zip https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-windows-amd64.zip
+          unzip -o libduckdb.zip duckdb.dll
+
+      - name: Run tests
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then sep=";"; bb=./bb.exe; else sep=":"; bb=./bb; fi
+          "$bb" -cp "src${sep}test" -e "
+            (require '[clojure.test :as t] 'babashka.duckdb-test)
+            (println \"duckdb\" (babashka.duckdb/version))
+            (let [{:keys [fail error]} (t/run-tests 'babashka.duckdb-test)]
+              (System/exit (min 1 (+ fail error))))"

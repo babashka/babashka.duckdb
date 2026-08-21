@@ -15,7 +15,7 @@
         (duck/query db \"select count(*) c from t\"))
 
   Rows come back as maps with keywordized column names. Integer columns
-  (including booleans, as 0/1) come back as longs, FLOAT/DOUBLE as doubles,
+  come back as longs, BOOLEAN as true/false, FLOAT/DOUBLE as doubles,
   everything else (VARCHAR, DATE, TIMESTAMP, ...) as strings."
   (:require [babashka.ffi :as ffi :refer [defcfn]]))
 
@@ -103,8 +103,10 @@
 (defn- value-at [res col row type-id]
   (when (zero? (c-value-is-null res col row))
     (cond
-      ;; BOOLEAN..UBIGINT
-      (<= 1 type-id 9) (c-value-int64 res col row)
+      ;; BOOLEAN
+      (= 1 type-id) (not (zero? (c-value-int64 res col row)))
+      ;; TINYINT..UBIGINT
+      (<= 2 type-id 9) (c-value-int64 res col row)
       ;; FLOAT, DOUBLE
       (<= 10 type-id 11) (c-value-double res col row)
       :else (varchar-at res col row))))

@@ -12,8 +12,8 @@
       (is (= {:rows-changed 3}
              (duck/execute! db "insert into t values (1, 1.5, 'a', true), (2, 2.5, 'b', false), (3, null, null, null)"))))
     (testing "typed reads and null"
-      (is (= [{:i 1 :d 1.5 :s "a" :b 1}
-              {:i 2 :d 2.5 :s "b" :b 0}
+      (is (= [{:i 1 :d 1.5 :s "a" :b true}
+              {:i 2 :d 2.5 :s "b" :b false}
               {:i 3 :d nil :s nil :b nil}]
              (duck/query db "select * from t order by i"))))
     (testing "parameter binding"

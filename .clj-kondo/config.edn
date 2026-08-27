@@ -1,2 +1,2 @@
-{:lint-as {babashka.ffi/defcfn clj-kondo.lint-as/def-catch-all
-           babashka.duckdb/with-db clojure.core/with-open}}
+{:hooks {:analyze-call {babashka.ffi/defcfn hooks.babashka.ffi/defcfn}}
+ :lint-as {babashka.duckdb/with-db clojure.core/with-open}}

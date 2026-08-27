@@ -20,7 +20,6 @@
 
 (ffi/load-system-library "duckdb")
 
-(defcfn ^:private c-library-version "duckdb_library_version" [] :string)
 (defcfn ^:private c-open "duckdb_open" [:string :pointer] :int)
 (defcfn ^:private c-close "duckdb_close" [:pointer] :void)
 (defcfn ^:private c-connect "duckdb_connect" [:pointer :pointer] :int)
@@ -47,10 +46,9 @@
 (defcfn ^:private c-bind-varchar "duckdb_bind_varchar" [:pointer :uint64 :string] :int)
 (defcfn ^:private c-bind-null "duckdb_bind_null" [:pointer :uint64] :int)
 
-(defn version
+(defcfn version
   "Returns the version of the loaded DuckDB library."
-  []
-  (c-library-version))
+  "duckdb_library_version" [] :string)
 
 ;; Reserve more than the 48 bytes that duckdb_result needs.
 (def ^:private result-size 64)
@@ -61,29 +59,32 @@
   connection for use with query, execute! and close!. The returned connection
   is a single-thread object. Concurrent use may crash the process."
   [path]
-  (let [pdb (ffi/alloc (ffi/sizeof :pointer))
-        pconn (ffi/alloc (ffi/sizeof :pointer))]
-    (try
-      (when-not (zero? (c-open path pdb))
-        (throw (ex-info (str "duckdb: cannot open " path) {})))
-      (let [db (ffi/read pdb :pointer)]
-        (when-not (zero? (c-connect db pconn))
-          (c-close pdb)
-          (throw (ex-info "duckdb: cannot connect" {})))
-        {:db pdb :conn (ffi/read pconn :pointer)})
-      (finally (ffi/free pconn)))))
+  ;; pdb lives in the connection map until close!, so it comes from the C
+  ;; allocator, not from a scoped arena
+  (let [pdb (ffi/alloc :pointer)]
+    (with-open [arena (ffi/confined-arena)]
+      (let [pconn (ffi/alloc arena :pointer)]
+        (when-not (zero? (c-open path pdb))
+          (ffi/free pdb)
+          (throw (ex-info (str "duckdb: cannot open " path) {})))
+        (let [db (ffi/read pdb :pointer)]
+          (when-not (zero? (c-connect db pconn))
+            (c-close pdb)
+            (ffi/free pdb)
+            (throw (ex-info "duckdb: cannot connect" {})))
+          {:db pdb :conn (ffi/read pconn :pointer)})))))
 
 (defn close!
   "Closes a connection from open. Returns nil."
   [{:keys [db conn]}]
-  (let [pconn (ffi/alloc (ffi/sizeof :pointer))]
-    (try
-      (ffi/write pconn :pointer 0 conn)
-      (c-disconnect pconn)
-      (c-close db)
-      (finally
-        (ffi/free pconn)
-        (ffi/free db))))
+  (with-open [arena (ffi/confined-arena)]
+    (let [pconn (ffi/alloc arena :pointer)]
+      (try
+        (ffi/write pconn :pointer 0 conn)
+        (c-disconnect pconn)
+        (c-close db)
+        (finally
+          (ffi/free db)))))
   nil)
 
 (defmacro with-db
@@ -141,44 +142,43 @@
           (range nrow))))
 
 (defn- run* [conn q collect-rows?]
-  (let [[sql & params] (if (string? q) [q] q)
-        res (ffi/alloc result-size)]
-    (try
-      (if (seq params)
-        (let [pstmt (ffi/alloc (ffi/sizeof :pointer))]
-          (try
-            ;; on failure the finally destroys the statement; the error
-            ;; message must be read from it first
-            (when-not (zero? (c-prepare (:conn conn) sql pstmt))
+  (with-open [arena (ffi/confined-arena)]
+    (let [[sql & params] (if (string? q) [q] q)
+          res (ffi/alloc arena result-size)]
+      (try
+        (if (seq params)
+          (let [pstmt (ffi/alloc arena :pointer)]
+            (try
+              ;; on failure the finally destroys the statement; the error
+              ;; message must be read from it first
+              (when-not (zero? (c-prepare (:conn conn) sql pstmt))
+                (let [stmt (ffi/read pstmt :pointer)]
+                  (throw (ex-info (str "duckdb: " (c-prepare-error stmt))
+                                  {:sql sql}))))
               (let [stmt (ffi/read pstmt :pointer)]
-                (throw (ex-info (str "duckdb: " (c-prepare-error stmt))
-                                {:sql sql}))))
-            (let [stmt (ffi/read pstmt :pointer)]
-              (doseq [[i v] (map-indexed vector params)]
-                (let [i (inc i)
-                      rc (cond
-                           (nil? v) (c-bind-null stmt i)
-                           (integer? v) (c-bind-int64 stmt i v)
-                           (float? v) (c-bind-double stmt i v)
-                           (string? v) (c-bind-varchar stmt i v)
-                           (boolean? v) (c-bind-int64 stmt i (if v 1 0))
-                           :else (throw (ex-info (str "duckdb: cannot bind " (type v))
-                                                 {:value v})))]
-                  (when-not (zero? rc)
-                    (throw (ex-info "duckdb: bind failed" {:sql sql :param v})))))
-              (when-not (zero? (c-execute-prepared stmt res))
-                (throw (ex-info (str "duckdb: " (c-result-error res)) {:sql sql}))))
-            (finally
-              (c-destroy-prepare pstmt)
-              (ffi/free pstmt))))
-        (when-not (zero? (c-query (:conn conn) sql res))
-          (throw (ex-info (str "duckdb: " (c-result-error res)) {:sql sql}))))
-      (if collect-rows?
-        (read-rows res)
-        {:rows-changed (c-rows-changed res)})
-      (finally
-        (c-destroy-result res)
-        (ffi/free res)))))
+                (doseq [[i v] (map-indexed vector params)]
+                  (let [i (inc i)
+                        rc (cond
+                             (nil? v) (c-bind-null stmt i)
+                             (integer? v) (c-bind-int64 stmt i v)
+                             (float? v) (c-bind-double stmt i v)
+                             (string? v) (c-bind-varchar stmt i v)
+                             (boolean? v) (c-bind-int64 stmt i (if v 1 0))
+                             :else (throw (ex-info (str "duckdb: cannot bind " (type v))
+                                                   {:value v})))]
+                    (when-not (zero? rc)
+                      (throw (ex-info "duckdb: bind failed" {:sql sql :param v})))))
+                (when-not (zero? (c-execute-prepared stmt res))
+                  (throw (ex-info (str "duckdb: " (c-result-error res)) {:sql sql}))))
+              (finally
+                (c-destroy-prepare pstmt))))
+          (when-not (zero? (c-query (:conn conn) sql res))
+            (throw (ex-info (str "duckdb: " (c-result-error res)) {:sql sql}))))
+        (if collect-rows?
+          (read-rows res)
+          {:rows-changed (c-rows-changed res)})
+        (finally
+          (c-destroy-result res))))))
 
 (defn- with-conn [db-or-path f]
   (if (map? db-or-path)

@@ -43,6 +43,6 @@
 (deftest path-test
   (testing "a string db opens and closes around the call"
     (let [path (str (System/getProperty "java.io.tmpdir")
-                    "/ffi-duckdb-test-" (System/currentTimeMillis) ".db")]
+                    "/babashka-duckdb-test-" (System/currentTimeMillis) ".db")]
       (duck/execute! path "create table k as select 42 answer")
       (is (= [{:answer 42}] (duck/query path "select * from k"))))))

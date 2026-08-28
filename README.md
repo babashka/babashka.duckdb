@@ -1,4 +1,4 @@
-# ffi-duckdb
+# babashka.duckdb
 
 [DuckDB](https://duckdb.org/) is a database that runs inside your program. It
 can read CSV files directly with SQL, without a separate database server.

@@ -59,32 +59,35 @@
   connection for use with query, execute! and close!. The returned connection
   is a single-thread object. Concurrent use may crash the process."
   [path]
-  ;; pdb lives in the connection map until close!, so it comes from the C
-  ;; allocator, not from a scoped arena
-  (let [pdb (ffi/alloc :pointer)]
-    (with-open [arena (ffi/confined-arena)]
-      (let [pconn (ffi/alloc arena :pointer)]
-        (when-not (zero? (c-open path pdb))
-          (ffi/free pdb)
-          (throw (ex-info (str "duckdb: cannot open " path) {})))
-        (let [db (ffi/read pdb :pointer)]
-          (when-not (zero? (c-connect db pconn))
-            (c-close pdb)
-            (ffi/free pdb)
-            (throw (ex-info "duckdb: cannot connect" {})))
-          {:db pdb :conn (ffi/read pconn :pointer)})))))
+  ;; pdb lives in the connection map until close!, which is not a lexical
+  ;; lifetime, so it gets a shared arena that close! closes
+  (let [db-arena (ffi/shared-arena)]
+    (try
+      (let [pdb (ffi/alloc db-arena :pointer)]
+        (with-open [scratch (ffi/confined-arena)]
+          (let [pconn (ffi/alloc scratch :pointer)]
+            (when-not (zero? (c-open path pdb))
+              (throw (ex-info (str "duckdb: cannot open " path) {})))
+            (let [db (ffi/read pdb :pointer)]
+              (when-not (zero? (c-connect db pconn))
+                (c-close pdb)
+                (throw (ex-info "duckdb: cannot connect" {})))
+              {:db pdb :arena db-arena :conn (ffi/read pconn :pointer)}))))
+      (catch Throwable e
+        (.close db-arena)
+        (throw e)))))
 
 (defn close!
   "Closes a connection from open. Returns nil."
-  [{:keys [db conn]}]
-  (with-open [arena (ffi/confined-arena)]
-    (let [pconn (ffi/alloc arena :pointer)]
+  [{:keys [db conn arena]}]
+  (with-open [scratch (ffi/confined-arena)]
+    (let [pconn (ffi/alloc scratch :pointer)]
       (try
-        (ffi/write pconn :pointer 0 conn)
+        (ffi/write pconn :pointer conn)
         (c-disconnect pconn)
         (c-close db)
         (finally
-          (ffi/free db)))))
+          (.close arena)))))
   nil)
 
 (defmacro with-db

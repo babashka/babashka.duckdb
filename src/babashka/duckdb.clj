@@ -104,8 +104,9 @@
 (defn- varchar-at [res col row]
   (let [p (c-value-varchar res col row)]
     (when-not (ffi/null? p)
-      ;; duckdb gives a C string without a size; read it up to its NUL
-      (let [s (ffi/ptr->string (ffi/reinterpret p Long/MAX_VALUE))]
+      ;; duckdb gives a C string without a size; ptr->string reads it up
+      ;; to its NUL
+      (let [s (ffi/ptr->string p)]
         (c-duckdb-free p)
         s))))
 
